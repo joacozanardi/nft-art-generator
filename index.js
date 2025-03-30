@@ -11,6 +11,9 @@ const template = `
     </svg>
 `;
 
+// Array to store all metadata entries for CSV generation
+const allMetadata = [];
+
 function randInt(max) {
     return Math.floor(Math.random() * (max + 1));
 }
@@ -18,12 +21,18 @@ function randInt(max) {
 function createImage(index) {
     let finalSvg = template;
 
+    // Create an object to store attributes for CSV format
+    const attributeValues = {};
+
     const attributes = Object.entries(config.layers).map(([part, { count }]) => {
         const partIndex = randInt(count - 1);
         finalSvg = finalSvg.replace(
             `<!-- ${part} -->`,
             getLayer(`${part}/${part}${partIndex}`)
         );
+
+        attributeValues[part] = partIndex;
+
         return {
             trait_type: part,
             value: partIndex
@@ -33,14 +42,14 @@ function createImage(index) {
     const name = `${config.collectionName} #${index}`;
     console.log(name);
 
-    const meta = {
+    allMetadata.push({
+        tokenID: index,
         name,
         description: `A drawing of ${name.split('-').join(' ')}`,
-        image: `${index}.png`,
-        attributes
-    };
+        file_name: `${index}.png`,
+        attributes: attributeValues
+    });
 
-    writeFileSync(`${config.outputDir}/${index}.json`, JSON.stringify(meta, null, 2));
     writeFileSync(`${config.outputDir}/${index}.svg`, finalSvg);
     svgToPng(index);
 }
@@ -81,12 +90,57 @@ async function svgToPng(name) {
     await resized.toFile(dest);
 }
 
+// Function to escape CSV values that contain commas, quotes, or newlines
+function escapeCSV(value) {
+    const stringValue = String(value);
+    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+}
+
+// Function to generate CSV from collected metadata
+function generateCSV() {
+    // Get all attribute keys
+    const attributeKeys = new Set();
+    allMetadata.forEach(item => {
+        Object.keys(item.attributes).forEach(key => {
+            attributeKeys.add(key);
+        });
+    });
+
+    // Create CSV header
+    let csvContent = 'tokenID,name,description,file_name';
+    attributeKeys.forEach(key => {
+        csvContent += `,attributes[${key}]`;
+    });
+    csvContent += '\n';
+
+    // Add data rows
+    allMetadata.forEach(item => {
+        csvContent += `${item.tokenID},${escapeCSV(item.name)},${escapeCSV(item.description)},${item.file_name}`;
+
+        attributeKeys.forEach(key => {
+            const value = item.attributes[key] !== undefined ? item.attributes[key] : '';
+            csvContent += `,${escapeCSV(value)}`;
+        });
+
+        csvContent += '\n';
+    });
+
+    writeFileSync(`${config.outputDir}/metadata.csv`, csvContent);
+    console.log(`CSV metadata written to ${config.outputDir}/metadata.csv`);
+}
+
+
 if (!existsSync(config.outputDir)) {
     mkdirSync(config.outputDir);
 }
 
 readdirSync(config.outputDir).forEach(f => rmSync(`${config.outputDir}/${f}`));
 
-for (let collectionSize = 0; collectionSize < config.collectionSize; collectionSize++) {
+for (let collectionSize = 1; collectionSize <= config.collectionSize; collectionSize++) {
     createImage(collectionSize);
 }
+
+generateCSV();

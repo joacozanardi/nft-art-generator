@@ -14,7 +14,7 @@ module.exports = {
     imageSize: 1024,
     collectionSize: 10,
     layers: {
-        bg: { count: getPartCount('bg') },
+        background: { count: getPartCount('background') },
         body: { count: getPartCount('body') },
         hair: { count: getPartCount('hair') },
         eyes: { count: getPartCount('eyes') },
